@@ -6,3 +6,4 @@ misc
 ./misc
 misc/
 ./misc/
+src/SCFG/__pycache__/

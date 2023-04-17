@@ -111,7 +111,7 @@ class CFG:
                             for k in range(0, i):
                                 beta[i, j, v] += trans_prob[x, y, v] * inside_table[k, i - 1, y] * beta[k, j, x]
                             for k in range(j + 1, L):
-                                beta[i, j, v] += trans_prob[x, y, v] * inside_table[j + 1, k - 1, y] * beta[j, k, x]
+                                beta[i, j, v] += trans_prob[x, v, y] * inside_table[j + 1, k , y] * beta[i, k, x]
         return beta
 
     def outside_driver(self, string):
@@ -298,13 +298,13 @@ def create_simple_grammar(data_set, train=False, pretrained_file=None):
         # this is for RNA secondary structure prediction
         terminals = np.array(['A', 'U', 'C', 'G'])
         non_terminals = ['S']
-        for i in range(15):
+        for i in range(10):
             non_terminals.append('x_' + str(i))
         demo_grammar = CFG('S', terminals, non_terminals)
         data = read_fa_file(data_set)
         # we create a grammar that is very simple, and we use it to test the code
         # train the grammar
-        demo_grammar.inside_out_algorithm_driver(data[:25])
+        demo_grammar.inside_out_algorithm_driver(data[:20])
         # store the entire object
         with open(pretrained_file, 'wb') as f:
             pickle.dump(demo_grammar, f)
@@ -318,14 +318,14 @@ def create_simple_grammar(data_set, train=False, pretrained_file=None):
 def get_data_set_paths():
     x = {}
     x['humanTNRA'] = os.path.join(DATA_SET_PATH, "hg19-tRNAs", "hg19-mature-tRNAs.fa")
+    x['strand']=os.path.join(DATA_SET_PATH, "RNA_STRAND_data", "RNA_STRAND_data","all_ct_files")
     return x
-
 
 def main():
     # first we create an artificial grammar, mainly for testing purposes.
     # the grammar is for RNA secondary structure prediction
     data_set_paths = get_data_set_paths()
-    demo = create_simple_grammar(data_set_paths['humanTNRA'])
+    demo = create_simple_grammar(data_set_paths['humanTNRA'], train=True)
 
 
 if __name__ == '__main__':
