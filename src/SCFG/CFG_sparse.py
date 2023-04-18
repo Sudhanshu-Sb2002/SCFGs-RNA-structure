@@ -239,10 +239,8 @@ class CFG:
                                 continue
                             beta[i, j, v] += et_rule[x, string[i], v, string[j]] * beta[i - 1, j + 1, x]
         return beta
-
     @staticmethod
-    @njit(cache=True, parallel=True)
-    def inside_outside_algorithm(strings, tr_rule, e_rule, r_rule, et_rule, rule_present, single_rules, double_rules,
+    def inside_outside_algorithm1(strings, tr_rule, e_rule, r_rule, et_rule, rule_present, single_rules, double_rules,
                                  n_term, n_nonterm, inside_algorithm, outside_algorithm, *, n_iter=10, tol=1e-5):
         """
         :param n_iter: maximum number of iterations of EM
@@ -402,9 +400,215 @@ class CFG:
             iteration += 1
         return tr_rule, e_rule, r_rule, et_rule, LogLikelihood, EachLogLikelihood
 
+    # savepoint
+
     @staticmethod
-    def convert_strings_to_int(strings, terminal_dict, name=None):
+    @njit(cache=True, parallel=True)
+    def inside_outside_algorithm(strings, tr_rule, e_rule, r_rule, et_rule, rule_present, single_rules, double_rules,
+                                 n_term, n_nonterm, inside_algorithm, outside_algorithm, *, n_iter=10, tol=1e-5):
+        """
+        :param n_iter: maximum number of iterations of EM
+        :param tol: The min difference in successive EM iterations after which to quit EM
+        :param strings:(list of string) training data
+
+        :param n_term: (int) number of terminals
+        :param n_nonterm: (int) number of nonterminals
+        :return: (np.array,np.array, np.array) transition and emission matrix and log likelihood
+        """
+        #print(type(strings))
+        LogLikelihood = np.zeros(n_iter + 1, dtype=float)
+        EachLogLikelihood = np.zeros(len(strings), dtype=float)
+        iteration = 0
+        inners = [np.zeros((len(string), len(string), n_nonterm), dtype=float) for string in strings]
+        outers = [np.zeros((len(string), len(string), n_nonterm), dtype=float) for string in strings]
+
+        rules_denom = np.zeros(n_nonterm, dtype=float)
+        rules_denom1 = np.zeros((len(strings),n_nonterm), dtype=float)
+
+        tr_old, e_old, r_old, et_old = tr_rule.copy(), e_rule.copy(), r_rule.copy(), et_rule.copy()
+
+        for s in range(len(strings)):
+            inside_algorithm(strings[s], tr_rule, e_rule, r_rule, et_rule, rule_present, n_nonterm, inners[s])
+            if inners[s][0, len(strings[s]) - 1, 0] == 0 or np.isnan(inners[s][0, len(strings[s]) - 1, 0]) or\
+                    np.isinf(inners[s][0, len(strings[s]) - 1, 0]):
+                print("string ", s, " is not accepted by the grammar")
+
+            outside_algorithm(tr_rule, r_rule, et_rule, rule_present, n_nonterm, outers[s], inners[s], strings[s])
+        print("First Expectation found")
+        for s in prange(len(strings)):
+            EachLogLikelihood[s] = -np.log(inners[s][0, len(strings[s]) - 1, 0])/len(strings[s])
+        LogLikelihood[iteration] = np.sum(EachLogLikelihood)
+        print(iteration, LogLikelihood[iteration] / len(strings))
+        iteration += 1
+
+        for v in range(n_nonterm):
+            if rule_present[v, 0] == 1:
+                for y in range(n_nonterm):
+                    for z in range(n_nonterm):
+                        if not np.isnan(tr_rule[v, y, z]):
+                            print('\t', v, "->", y, z, ":", np.round(tr_rule[v, y, z], 3))
+
+            if rule_present[v, 1] == 1:
+                print('\t', v, "-> s :", np.round(np.sum(e_rule[v]), 2))
+
+            if rule_present[v, 2] == 1:
+                for x in range(n_nonterm):
+                    if not np.isnan(r_rule[v, x]):
+                        print('\t', v, "->", x, ":", np.round(r_rule[v, x], 3))
+
+            if rule_present[v, 3] == 1:
+                for x in range(n_nonterm):
+                    if not np.isnan(et_rule[v, 0, x, 0]):
+                        print('\t', v, "->d", x, 'd :', np.round(np.sum(et_rule[v, :, x, :]), 3))
+        e_rule1=np.zeros((len(strings),n_nonterm,n_term),dtype=float)
+        tr_rule1=np.zeros((len(strings),n_nonterm,n_nonterm,n_nonterm),dtype=float)
+        r_rule1=np.zeros((len(strings),n_nonterm,n_nonterm),dtype=float)
+        et_rule1=np.zeros((len(strings),n_nonterm,n_term,n_nonterm,n_term),dtype=float)
+
+        while True:
+            # set all non nan terms in rules to 0
+            # NEED TO SET RULES TO ZERO
+            # M step
+            # update the transition and emission matrix
+            rules_denom.fill(0)
+            rules_denom1.fill(0)
+            for v in prange(n_nonterm):
+                # update the emission matrix
+                if rule_present[v, 1] == 1:
+                    e_rule[v, :] = 0
+                    e_rule1[:,v, :] = 0
+                    for s in range(len(strings)):
+                        for i in range(len(strings[s])):
+                            e_rule1[s,v, strings[s][i]] += outers[s][i, i, v]*e_old[v, strings[s][i]]
+                        e_rule1[s,v, :] = np.sum(e_rule1[s,v, :]) * single_rules
+
+                # update the transition matrix
+                if rule_present[v, 0] == 1:
+                    for y in range(n_nonterm):
+                        for z in range(n_nonterm):
+                            # check if the old transition probability is nan
+                            if np.isnan(tr_rule[v, y, z]):
+                                continue
+                            tr_rule1[:,v, y, z] = 0
+                            tr_rule[v, y, z] = 0
+                            for s in range(len(strings)):
+                                for i in range(len(strings[s])):
+                                    for j in range(i + 1, len(strings[s])):
+                                        for k in range(i, j ):
+                                            tr_rule1[s,v, y, z] += outers[s][i, j, v] * inners[s][i, k, y] * inners[s][
+                                                k + 1, j, z]*tr_old[v, y, z]
+                # update the replace rule
+                if rule_present[v, 2] == 1:
+                    for x in range(n_nonterm):
+                        if np.isnan(r_rule[v, x]):
+                            continue
+                        r_rule1[:,v, x] = 0
+                        r_rule[v, x] = 0
+                        for s in range(len(strings)):
+                            for i in range(len(strings[s])):
+                                for j in range(i + 1, len(strings[s])):
+                                    r_rule1[s,v, x] += outers[s][i, j, v] * inners[s][i, j, x]*r_old[v, x]
+                # update the ET rule
+                if rule_present[v, 3] == 1:
+                    for x in range(n_nonterm):
+                        if np.isnan(et_rule[v, 0, x, 0]):
+                            continue
+                        et_rule1[:,v, :, x, :] = 0
+                        et_rule[v, :, x,:] = 0
+                        for s in range(len(strings)):
+                            for i in range(len(strings[s])):
+                                for j in range(i + 2, len(strings[s])):
+                                    et_rule1[s,v, strings[s][i], x, strings[s][j]] += outers[s][i, j, v] * inners[s][
+                                        i + 1, j - 1, x]*et_old[v, strings[s][i], x, strings[s][j]]
+                            et_rule1[s,v, :, x, :] = np.sum(et_rule1[s,v, :, x, :]) * double_rules
+
+
+                '''rules_denom[v] = np.nansum(tr_rule[v]) + np.nansum(e_rule[v]) + np.nansum(r_rule[v]) + np.nansum(
+                    et_rule[v])
+
+                tr_rule[v] /= rules_denom[v]
+                e_rule[v] /= rules_denom[v]
+                r_rule[v] /= rules_denom[v]
+                et_rule[v] /= rules_denom[v]'''
+                for s in prange(len(strings)):
+                    rules_denom1[s,v] = np.nansum(tr_rule1[s,v]) + np.nansum(e_rule1[s,v]) + np.nansum(r_rule1[s,v]) + np.nansum(
+                        et_rule1[s,v])
+                    tr_rule1[s,v] /= rules_denom1[s,v]
+                    e_rule1[s,v] /= rules_denom1[s,v]
+                    r_rule1[s,v] /= rules_denom1[s,v]
+                    et_rule1[s,v] /= rules_denom1[s,v]
+
+                    tr_rule[v] += tr_rule1[s,v]
+                    e_rule[v] += e_rule1[s,v]
+                    r_rule[v] += r_rule1[s,v]
+                    et_rule[v] += et_rule1[s,v]
+
+                rules_denom[v]= np.nansum(tr_rule[v]) + np.nansum(e_rule[v]) + np.nansum(r_rule[v]) + np.nansum(et_rule[v])
+                tr_rule[v] /= rules_denom[v]
+                e_rule[v] /= rules_denom[v]
+                r_rule[v] /= rules_denom[v]
+                et_rule[v] /= rules_denom[v]
+
+
+
+            '''for v in prange(n_nonterm):
+                tr_rule[v] /= rules_denom[v]
+                e_rule[v] /= rules_denom[v]
+                r_rule[v] /= rules_denom[v]
+                et_rule[v] /= rules_denom[v]'''
+
+
+            # E step
+            # compute the inside and outside tables for each string
+            for s in prange(len(strings)):
+                inners[s].fill(0)
+                outers[s].fill(0)
+                inside_algorithm(strings[s], tr_rule, e_rule, r_rule, et_rule, rule_present, n_nonterm, inners[s])
+
+                outside_algorithm(tr_rule, r_rule, et_rule, rule_present, n_nonterm, outers[s], inners[s],
+                                  strings[s])
+
+            # compute the log likelihood
+            for s in prange(len(strings)):
+                EachLogLikelihood[s] = -np.log(inners[s][0, len(strings[s]) - 1, 0])
+            LogLikelihood[iteration] = np.sum(EachLogLikelihood)
+            print(iteration, round(LogLikelihood[iteration] / len(strings), 2))
+
+            if iteration >= n_iter or np.abs(LogLikelihood[iteration] - LogLikelihood[iteration - 1]) < tol:
+                break
+
+            if iteration % 1 == 0:
+                # print all non nan rules
+                for v in range(n_nonterm):
+                    if rule_present[v, 0] == 1:
+                        for y in range(n_nonterm):
+                            for z in range(n_nonterm):
+                                if not np.isnan(tr_rule[v, y, z]):
+                                    print('\t',v, "->", y, z,":", np.round(tr_rule[v, y, z], 3))
+
+                    if rule_present[v, 1] == 1:
+                        print('\t',v, "-> s :", np.round(np.sum(e_rule[v]), 3))
+
+                    if rule_present[v, 2] == 1:
+                        for x in range(n_nonterm):
+                            if not np.isnan(r_rule[v, x]):
+                                print('\t',v, "->", x,":", np.round(r_rule[v, x],3))
+
+                    if rule_present[v, 3] == 1:
+                        for x in range(n_nonterm):
+                            if not np.isnan(et_rule[v, 0, x, 0]):
+                                print('\t',v, "->d", x, 'd :', np.round(np.sum(et_rule[v, :, x, :]),3))
+            tr_old, tr_rule = tr_rule, tr_old
+            e_old, e_rule = e_rule, e_old
+            r_old, r_rule = r_rule, r_old
+            et_old, et_rule = et_rule, et_old
+            iteration += 1
+        return tr_rule, e_rule, r_rule, et_rule, LogLikelihood, EachLogLikelihood
+
+    @staticmethod
+    def convert_strings_to_int(strings, terminal_dict, name=None,ind=False):
         intstrings = list()
+        list_ind = list()
         wrong_bases = 0
         for s in range(len(strings)):
             intstrings.append(np.zeros_like(strings[s][0], dtype=int))
@@ -414,14 +618,25 @@ class CFG:
                     intstrings[s][i] = terminal_dict[strings[s][0][i]]
                 except KeyError:
                     intstrings[s][i] = np.random.randint(0, len(terminal_dict))
+                    if ind:
+                        list_ind.append(s)
                     wrong_bases += 1
         if name is not None:
             print(name, "wrong bases:", wrong_bases, end='\t')
+            if ind:
+                print("wrong bases in strings:", list_ind)
         return intstrings
 
     def inside_out_driver(self, strings, single_rules, double_rules):
-        intstrings = self.convert_strings_to_int(strings, self.terminal_dict, "inside_out_driver")
-        x = self.inside_outside_algorithm(intstrings, self.rules[0], self.rules[1], self.rules[2], self.rules[3],
+        intstrings = self.convert_strings_to_int(strings, self.terminal_dict, "inside_out_driver",ind=True)
+        tr_rule1, e_rule1, r_rule1, et_rule1 = np.copy(self.rules[0]), np.copy(self.rules[1]), np.copy(self.rules[2]), np.copy(self.rules[3])
+        tr_rule1[0, 1, 0] = 0.869
+        tr_rule1[2, 1, 0] = 0.212
+        e_rule1[1] = 0.895 * single_rules
+        r_rule1[0, 1] = 0.131
+        et_rule1[2, :, 2, :] = 0.788 * double_rules
+        et_rule1[1, :, 2, :] = 0.105 * double_rules
+        x = self.inside_outside_algorithm(intstrings, tr_rule1,e_rule1, r_rule1, et_rule1,
                                           self.rule_present, single_rules, double_rules, len(self.terminal_dict),
                                           len(self.nonterminal_dict),
                                           self.inside_algorithm, self.outside_algorithm, n_iter=20, tol=0.1)
@@ -429,16 +644,29 @@ class CFG:
         tr_rule, e_rule, r_rule, et_rule, LogLikelihood, EachLogLikelihood = x
         self.rules = [tr_rule, e_rule, r_rule, et_rule]
         tr_rule1,e_rule1, r_rule1, et_rule1=np.copy(tr_rule),np.copy(e_rule),np.copy(r_rule),np.copy(et_rule)
+        '''tr_rule1,e_rule1, r_rule1, et_rule1=np.copy(self.rules[0]),np.copy(self.rules[1]),np.copy(self.rules[2]),np.copy(self.rules[3])
         tr_rule1[0,1,0]=0.869
         tr_rule1[2,1,0]=0.212
         e_rule1[1]=0.895*single_rules
         r_rule1[0,1]=0.131
         et_rule1[2,:,2,:]=0.788*double_rules
         et_rule1[1,:,2,:]=0.105*double_rules
-
+        t=self.inside_outside_algorithm(intstrings, tr_rule1,e_rule1, r_rule1, et_rule1,
+                                          self.rule_present, single_rules, double_rules, len(self.terminal_dict),
+                                          len(self.nonterminal_dict),
+                                          self.inside_algorithm, self.outside_algorithm, n_iter=20, tol=0.1)'''
         # a function that compares likelihoods using two different rules
-        string1=intstrings[-1]
-        def comp(string):
+        '''string=intstrings[81]
+        tr_rule1[0, 1, 0] = 0.944
+        tr_rule1[2, 1, 0] = 0.056
+        e_rule1[1] = 0.714 * single_rules
+        r_rule1[0, 1] = 0.106
+        et_rule1[2, :, 2, :] = 0.286 * double_rules
+        et_rule1[1, :, 2, :] = 0.894 * double_rules
+        yy = self.inside_algorithm(string, tr_rule1, e_rule1, r_rule1, et_rule1, self.rule_present,
+                               len(self.nonterminals),
+                               np.zeros((len(string), len(string), len(self.nonterminals))))'''
+        '''def comp(string):
             xx = self.inside_algorithm(string, tr_rule, e_rule, r_rule, et_rule, self.rule_present,len(self.nonterminals),
                                        np.zeros((len(string), len(string), len(self.nonterminals))))
             yy = self.inside_algorithm(string, tr_rule1, e_rule1, r_rule1, et_rule1, self.rule_present,len(self.nonterminals),
@@ -452,12 +680,13 @@ class CFG:
         r_rule[0, 1] = 0.131
         et_rule[2, :, 2, :] = 0.788 * double_rules
         et_rule[1, :, 2, :] = 0.105 * double_rules
-        string = string1
+        string=np.array([2,1,0,0,2,1,3])
+        #string = string1
         yy = self.inside_algorithm(string, tr_rule1, e_rule1, r_rule1, et_rule1, self.rule_present,
                                    len(self.nonterminals),
                                    np.zeros((len(string), len(string), len(self.nonterminals))))
         zz = outside_algorithm1(tr_rule1, r_rule1, et_rule1, self.rule_present, len(self.nonterminals),
-                                np.zeros((len(string1), len(string1), len(self.nonterminals))), yy, string)
+                                np.zeros((len(string), len(string), len(self.nonterminals))), yy, string)'''
 
         '''
         tr_rule[0,1,0]=0.869
@@ -467,6 +696,7 @@ class CFG:
         et_rule[2,:,2,:]=0.788*double_rules
         et_rule[1,:,2,:]=0.105*double_rules'''
         return LogLikelihood, EachLogLikelihood
+        #return t
 
 
     #  TOO MANY UNIKNOWNS CHARACTERS, PERHAPS SKIP
@@ -594,9 +824,11 @@ def create_grammar():
     return grammar
 
 
+
 def train_grammar(grammar, strands, single_freq, double_freq):
     # now we train the grammar
     # first print out the  single and double frequencies
+
     print("Single Frequencies in Loop Region")
     for i in range(len(single_freq)):
         print(f"{grammar.terminals[i]} : {single_freq[i]:.2f}")
@@ -616,8 +848,12 @@ def train_grammar(grammar, strands, single_freq, double_freq):
             for w in range(len(grammar.nonterminals)):
                 if ~np.isnan(grammar.rules[3][v, 0, w, 0]):
                     grammar.rules[3][v, :, w, :] = np.sum(grammar.rules[3][v, :, w, :]) * double_freq
-
-    grammar.inside_out_driver(strands[0:50], single_freq, double_freq)
+    strings_smaller_than_200=np.array([strand.shape[1]<200 for strand in strands])
+    strands_to_pass=[]
+    for i in range(len(strings_smaller_than_200)):
+        if strings_smaller_than_200[i]:
+            strands_to_pass.append(strands[i])
+    grammar.inside_out_driver(strands_to_pass, single_freq, double_freq)
     return grammar
 
 
