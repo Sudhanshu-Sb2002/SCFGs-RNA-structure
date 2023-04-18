@@ -3,7 +3,7 @@ import os
 import pickle
 import pandas as pd
 import numpy as np
-
+from numba import njit
 def get_data_set_paths(DATA_SET_PATH):
     x = {}
 
@@ -51,7 +51,12 @@ def read_all_RNA_strand_data(data_set_path, reread=False,reload_path=None):
                     print(file, end="\t")
             except:
                 print("error in file", file)
+        try:
+            seqs['data']=seqs['RFA']+seqs['SRP']
+        except:
+            pass
         pickle.dump(seqs, open(reload_path, "wb"))
+
     else:
         if reload_path is None:
             reload_path=os.path.join(data_set_path, "data.pkl")
@@ -74,3 +79,20 @@ def refine_strands(seqs):
     for i, key in enumerate(seqs.keys()):
         key_to_index[key] = i
     return seqs, key_to_index
+
+
+def write_ct_file(filename,sequence, pairings,name):
+    with open(filename, "w") as f:
+        f.write("# RNA secondary structure in connect format")
+        f.write(str(len(sequence))+" "+name)
+        for i in range(len(sequence)):
+            f.write(f"{i+1} {sequence[i]} {i} {i+2} {pairings[i]} {i+1}")
+
+def write_prediction_actual( file_loc, seq, prediction,actual, terminal_inv_dict):
+    actual_path=os.path.join(file_loc,"actual.ct")
+    prediction_path=os.path.join(file_loc,"prediction.ct")
+    write_ct_file(actual_path,seq,actual,"actual")
+    write_ct_file(prediction_path,seq,prediction,"prediction")
+
+
+

@@ -1,6 +1,6 @@
 import numpy as np
 from numba import njit, prange, jit
-import numba as nb
+import numba
 import os
 import sys
 import numba
@@ -10,7 +10,7 @@ sys.setrecursionlimit(40000)
 import warnings
 
 # turn off NumbaPendingDeprecationWarning
-warnings.filterwarnings("ignore", category=nb.errors.NumbaPendingDeprecationWarning)
+warnings.filterwarnings("ignore", category=numba.errors.NumbaPendingDeprecationWarning)
 
 
 class CFG:
@@ -80,7 +80,6 @@ class CFG:
                         self.rules[3][v, :, w, :] = np.sum(self.rules[3][v, :, w, :]) * double_freq
         return
 
-    # savepoint comment
     @staticmethod
     @jit(numba.f8[:, :, ::1](numba.i4[::1], numba.f8[:, :, ::1], numba.f8[:, ::1], numba.f8[:, ::1],
                              numba.f8[:, :, :, ::1], numba.f8[:, ::1], numba.i8, numba.f8[:, :, ::1]), nopython=True,
@@ -106,7 +105,7 @@ class CFG:
         # fill the rest of the table
         for i in range(L - 1, -1, -1):
             for j in range(i + 1, L):
-                for v in range(n_non_terminals):
+                for v in range(n_non_terminals - 1, -1, -1):
                     # lets go through all the rules that are present
                     if rule_present[v, 0] == 1:
                         # sum over all possible transitions
@@ -142,11 +141,10 @@ class CFG:
             beta[0, L - 1, i] = 0
         for i in range(0, L):
             for j in range(L - 1, i - 1, -1):
-                for v in range(n_non_terminals - 1, -1, -1):
+                for v in range(n_non_terminals):
                     # sum over all possible transitions
                     # there are 4 cases X->YV and X->VY, X->V and X->aVb
                     for x in range(n_non_terminals):
-
                         if rule_present[x, 0] == 1:
                             for y in range(n_non_terminals):
                                 if tr_rule[x, y, v] == 0 or np.isnan(tr_rule[x, y, v]):
@@ -171,9 +169,9 @@ class CFG:
         return beta
 
     @staticmethod
-    @jit(numba.f8[:, :, ::1](numba.i4[::1], numba.f8[:, :, ::1], numba.f8[:, ::1], numba.f8[:, ::1],
-                             numba.f8[:, :, :, ::1], numba.f8[:, ::1], numba.i8, numba.f8[:, :, ::1],
-                             numba.f8[:, :, :, :1]), nopython=True, cache=True)
+    @jit((numba.i4[::1], numba.f8[:, :, ::1], numba.f8[:, ::1], numba.f8[:, ::1],
+          numba.f8[:, :, :, ::1], numba.f8[:, ::1], numba.i8, numba.f8[:, :, ::1],
+          numba.i4[:, :, :, ::1]), nopython=True, cache=True)
     def CYK_algorithm(string, tr_rule, e_rule, r_rule, et_rule, rule_present, n_non_terminals, gamma, tau):
         gamma.fill(-np.inf)
         tau.fill(-1)
@@ -192,8 +190,9 @@ class CFG:
         for i in range(L):
             for v in range(n_non_terminals):
                 if rule_present[v, 1] == 1:
-                    gamma[i, i, v] = log_e[v, string[i], v]
-                    tau[i, i, v] = [0, string[i], -1, -1]
+                    gamma[i, i, v] = log_e[v, string[i]]
+                    tau[i, i, v] = [1, string[i], -1, -1]
+
             for v in range(n_non_terminals):
                 if rule_present[v, 2] == 1:
                     for x in range(n_non_terminals):
@@ -201,11 +200,11 @@ class CFG:
                         if np.isnan(r_rule[v, x]) or prob < gamma[i, i, v]:
                             continue
                         gamma[i, i, v] = prob
-                        tau[i, i, v] = [1, x, -1, -1]
+                        tau[i, i, v] = [2, x, -1, -1]
 
         for i in range(L - 1, -1, -1):
             for j in range(i + 1, L):
-                for v in range(n_non_terminals):
+                for v in range(n_non_terminals - 1, -1, -1):
                     # Transition rules
                     if rule_present[v, 0] == 1:
                         for x in range(n_non_terminals):
@@ -237,15 +236,15 @@ class CFG:
                             if prob < gamma[i, j, v]:
                                 continue
                             gamma[i, j, v] = prob
-                            tau[i, j, v] = [3, string[i], string[j], x]
+                            tau[i, j, v] = [3, x, string[i], string[j]]
         return gamma, tau
 
     @staticmethod
     @njit(cache=True, parallel=True)
     def inside_outside_algorithm(strings, tr_rule, e_rule, r_rule, et_rule, rule_present, single_rules, double_rules,
                                  n_term, n_nonterm, inside_algorithm, outside_algorithm, *, n_iter=10, tol=1e-5):
-        """
 
+        """
         :param strings: list of strings , each string is a numpy array of integers < n_term
         :param tr_rule:  transition rule, 3d array of size n_nonterm x n_nonterm x n_nonterm
         :param e_rule: emission rule, 3d array of size n_nonterm x n_term x n_nonterm
@@ -287,7 +286,7 @@ class CFG:
         print(iteration, round(LogLikelihood[iteration], 3))
         iteration += 1
 
-        for v in range(n_nonterm):
+        '''for v in range(n_nonterm):
             if rule_present[v, 0] == 1:
                 for y in range(n_nonterm):
                     for z in range(n_nonterm):
@@ -305,7 +304,7 @@ class CFG:
             if rule_present[v, 3] == 1:
                 for x in range(n_nonterm):
                     if not np.isnan(et_rule[v, 0, x, 0]):
-                        print('\t', v, "->d", x, 'd :', np.round(np.sum(et_rule[v, :, x, :]), 3))
+                        print('\t', v, "->d", x, 'd :', np.round(np.sum(et_rule[v, :, x, :]), 3))'''
         e_rule1 = np.zeros((len(strings), n_nonterm, n_term), dtype=float)
         tr_rule1 = np.zeros((len(strings), n_nonterm, n_nonterm, n_nonterm), dtype=float)
         r_rule1 = np.zeros((len(strings), n_nonterm, n_nonterm), dtype=float)
@@ -449,48 +448,63 @@ class CFG:
             iteration += 1
         return tr_rule, e_rule, r_rule, et_rule, LogLikelihood, EachLogLikelihood
 
-    def inside_out_driver(self, strings, single_rules, double_rules, n_starts=10):
-        intstrings = self.convert_strings_to_int(strings, self.terminal_dict, "inside_out_driver", ind=True)
+    def grammar_print_rules(self):
+        n_nonterm = len(self.nonterminals)
+        tr_rule, e_rule, r_rule, et_rule = self.rules[0], self.rules[1], self.rules[2], self.rules[3]
+        for v in range(n_nonterm):
+            if self.rule_present[v, 0] == 1:
+                for y in range(n_nonterm):
+                    for z in range(n_nonterm):
+                        if not np.isnan(tr_rule[v, y, z]):
+                            print('\t', v, "->", y, z, ":", np.round(tr_rule[v, y, z], 3), end=';')
+
+            if self.rule_present[v, 1] == 1:
+                print('\t', v, "-> s :", np.round(np.sum(e_rule[v]), 3), end=';')
+
+            if self.rule_present[v, 2] == 1:
+                for x in range(n_nonterm):
+                    if not np.isnan(r_rule[v, x]):
+                        print('\t', v, "->", x, ":", np.round(r_rule[v, x], 3), end=';')
+
+            if self.rule_present[v, 3] == 1:
+                for x in range(n_nonterm):
+                    if not np.isnan(et_rule[v, 0, x, 0]):
+                        print('\t', v, "->d", x, 'd :', np.round(np.sum(et_rule[v, :, x, :]), 3), end=';')
+        print()
+
+    def inside_out_driver(self, train_strings, val_strings, single_rules, double_rules, n_starts=10):
+        train = self.convert_strings_to_int(train_strings, self.terminal_dict, "Train Data: ", ind=True)
+        val = self.convert_strings_to_int(val_strings, self.terminal_dict, "Validation Data: ", ind=True)
         rule_start_list = []
-        start_likelihoods = []
+        val_likelihood = np.zeros(n_starts, dtype=float)
+        inner_vals = [np.zeros((len(s), len(s), len(self.nonterminal_dict)), dtype=float) for s in val]
+        traceback_vals = [np.zeros((len(s), len(s), len(self.nonterminal_dict), 4), dtype=int) for s in val]
         n_nonterm = len(self.nonterminal_dict)
         for i in range(n_starts):
-            print("\n\n\n\n\nstart", i)
+            print("\nIteration", end=' ')
             rule_start_list.append(
                 [np.copy(self.rules[0]), np.copy(self.rules[1]), np.copy(self.rules[2]), np.copy(self.rules[3])])
-            x = self.inside_outside_algorithm(intstrings, self.rules[0], self.rules[1], self.rules[2], self.rules[3],
+            x = self.inside_outside_algorithm(train, self.rules[0], self.rules[1], self.rules[2], self.rules[3],
                                               self.rule_present, single_rules, double_rules, len(self.terminal_dict),
-                                              len(self.nonterminal_dict),
-                                              self.inside_algorithm, self.outside_algorithm, n_iter=20, tol=0.001)
-            tr_rule, e_rule, r_rule, et_rule, LogLikelihood, EachLogLikelihood = x
-            LogLikelihood = LogLikelihood[np.nonzero(LogLikelihood)]
-            start_likelihoods.append(LogLikelihood[-1])
+                                              len(self.nonterminal_dict), self.inside_algorithm, self.outside_algorithm,
+                                              n_iter=20, tol=0.0001)
+            tr_rule, e_rule, r_rule, et_rule, _, _ = x
+            # use the CYK algorithm to compute the log likelihood of the validation set
+            for s in range(len(val)):
+                y, z = self.CYK_algorithm(val[s], tr_rule, e_rule, r_rule, et_rule, self.rule_present, n_nonterm,
+                                          inner_vals[s], traceback_vals[s])
+                val_likelihood[i] += y[0, len(val[s]) - 1, 0]
+            print(f"Train Log-Likelihood: {np.round(x[4], 3)}, Val CYK logLikelihood {val_likelihood}")
+            self.grammar_print_rules()
             self.assign_random_probablities(single_rules, double_rules)
-            for v in range(n_nonterm):
-                if self.rule_present[v, 0] == 1:
-                    for y in range(n_nonterm):
-                        for z in range(n_nonterm):
-                            if not np.isnan(tr_rule[v, y, z]):
-                                print('\t', v, "->", y, z, ":", np.round(tr_rule[v, y, z], 3))
 
-                if self.rule_present[v, 1] == 1:
-                    print('\t', v, "-> s :", np.round(np.sum(e_rule[v]), 3))
+        best_start = np.argmax(val_likelihood)
 
-                if self.rule_present[v, 2] == 1:
-                    for x in range(n_nonterm):
-                        if not np.isnan(r_rule[v, x]):
-                            print('\t', v, "->", x, ":", np.round(r_rule[v, x], 3))
-
-                if self.rule_present[v, 3] == 1:
-                    for x in range(n_nonterm):
-                        if not np.isnan(et_rule[v, 0, x, 0]):
-                            print('\t', v, "->d", x, 'd :', np.round(np.sum(et_rule[v, :, x, :]), 3))
-        best_start = np.argmax(start_likelihoods)
         tr_rule1, e_rule1, r_rule1, et_rule1 = rule_start_list[best_start]
-        x = self.inside_outside_algorithm(intstrings, tr_rule1, e_rule1, r_rule1, et_rule1,
+        x = self.inside_outside_algorithm(train, tr_rule1, e_rule1, r_rule1, et_rule1,
                                           self.rule_present, single_rules, double_rules, len(self.terminal_dict),
                                           len(self.nonterminal_dict),
-                                          self.inside_algorithm, self.outside_algorithm, n_iter=50, tol=0.00005)
+                                          self.inside_algorithm, self.outside_algorithm, n_iter=30, tol=0)
         tr_rule, e_rule, r_rule, et_rule, LogLikelihood, EachLogLikelihood = x
         self.rules = [tr_rule, e_rule, r_rule, et_rule]
 
@@ -572,6 +586,44 @@ class CFG:
             if ind:
                 print("wrong bases in strings:", list_ind)
         return intstrings
+
+
+#@njit((numba.i4[:, :, :, ::1], numba.i4[::1], numba.i4[::1]), cache=True)
+def convert_CYK_parse_to_RNA(tau, pos, RNA_strand_pairings):
+    # this store (index+1) of the base that is paired with the base at index, 0 if unpaired
+    # this function is called recursively, the split happpening when there is a transition rule being appplied
+    while True:
+        rule, x, y, k = tau[pos[0], pos[1], pos[2]]
+        if rule == 0:
+            # emission rule (wil only occur at the end of the recursion)
+            RNA_strand_pairings[pos[0]] = 0
+            break
+        elif rule == 2:
+            # replacement rule (no useful information, just continue loop changin the position)
+            pos[2] = x
+        elif rule == 3:
+            # T-E rule
+            RNA_strand_pairings[pos[0]] = pos[1] + 1
+            RNA_strand_pairings[pos[1]] = pos[0] + 1
+            pos[2] = x
+            pos[0] += 1
+            pos[1] -= 1
+        elif rule == 1:
+            # transition rule (split the recursion)
+            # split happens, such that we have to recurse for position string[pos[0],k,x] and string[k+1:pos[1],y]
+            convert_CYK_parse_to_RNA(tau, [pos[0], k, x], RNA_strand_pairings)
+            convert_CYK_parse_to_RNA(tau, [k + 1, pos[1], y], RNA_strand_pairings)
+            break
+    return
+
+
+def get_pairings_from_parse_tree(traceback_vals, len_strings):
+    # now we get the pairings from the parse tree
+    pairings = [np.zeros(s, dtype=int) for s in len_strings]
+    for i in range(len(len_strings)):
+        convert_CYK_parse_to_RNA(traceback_vals[i], [0, len_strings[i] - 1, 0], pairings[i])
+
+    return pairings
 
 
 '''
@@ -724,3 +776,5 @@ nan data.pkl
 224.74412532637075 SRP
 367.71487603305786 TMR
 Wrong bases:  0'''
+
+# savepoint comment
