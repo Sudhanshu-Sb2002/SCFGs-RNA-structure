@@ -549,8 +549,6 @@ class CFG:
                 r_rule[v] /= rules_denom[v]
                 et_rule[v] /= rules_denom[v]
 
-
-
             '''for v in prange(n_nonterm):
                 tr_rule[v] /= rules_denom[v]
                 e_rule[v] /= rules_denom[v]
@@ -570,7 +568,7 @@ class CFG:
 
             # compute the log likelihood
             for s in prange(len(strings)):
-                EachLogLikelihood[s] = -np.log(inners[s][0, len(strings[s]) - 1, 0])
+                EachLogLikelihood[s] = -np.log(inners[s][0, len(strings[s]) - 1, 0])/len(strings[s])
             LogLikelihood[iteration] = np.sum(EachLogLikelihood)
             print(iteration, round(LogLikelihood[iteration] / len(strings), 2))
 

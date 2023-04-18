@@ -7,3 +7,11 @@ misc
 misc/
 ./misc/
 src/SCFG/__pycache__/
+.idea/
+.idea
+./.idea
+./.idea/
+.gitignore
+.gitattributes
+./gitignore
+./gitattributes
