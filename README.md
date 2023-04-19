@@ -1,7 +1,7 @@
 # SCFGs_RNA
 Using Stochastic context free grammars to predict RNA secondary structure.Mostly following the approach outlined in the paper https://doi.org/10.1093/bioinformatics/15.6.446
 
-![RNA stucture](tmp_data_files/Predicted vs actual.png?raw=true)
+![RNA stucture](https://github.com/Sudhanshu-Sb2002/SCFGs-RNA-structure/blob/main/tmp_data_files/Predicted%20vs%20actual.png)
 To run the code, run src/main.py.
 There is general CFG class that can be used to create a context free grammar with 4 types of rules: Emissions, Transitions, Replacements, Emission-replacements
  
