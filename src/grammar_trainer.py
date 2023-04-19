@@ -26,18 +26,6 @@ def train_grammar(grammar, train, val, single_freq, double_freq):
     # now we train the grammar
     # first print out the  single and double frequencies
 
-    print("Single Frequencies in Loop Region")
-    for i in range(len(single_freq)):
-        print(f"{grammar.terminals[i]} : {single_freq[i]:.2f}")
-    print("Double Frequencies in Stem Region")
-    print(
-        f"Base:\t{grammar.terminals[0]:<10}{grammar.terminals[1]:<10}{grammar.terminals[2]:<10}{grammar.terminals[3]:<10}")
-    print()
-    for i in range(len(double_freq)):
-        print(f"{grammar.terminals[i]:<5}", end="\t")
-        print(
-            f"{double_freq[i, 0]:<10.2f}{double_freq[i, 1]:<10.2f}{double_freq[i, 2]:<10.2f}{double_freq[i, 3]:<10.2f}")
-
     grammar.assign_random_probablities(single_freq, double_freq)
 
     tr_rule1, e_rule1, r_rule1, et_rule1 = np.copy(grammar.rules[0]), np.copy(grammar.rules[1]), np.copy(
@@ -80,7 +68,7 @@ def create_grammar(non_terminals, terminals):
 def test_grammar(grammar: CFG, test_strings, recompute=False, prev_file=None):
     # first we print the rules
     grammar.grammar_print_rules()
-    test = grammar.convert_strings_to_int(test_strings, grammar.terminal_dict, "Test Data")
+    test = grammar.convert_strings_to_int(test_strings, grammar.terminal_dict)
     n_nonterm = len(grammar.nonterminal_dict)
     tr_rule, e_rule, r_rule, et_rule = grammar.rules[0], grammar.rules[1], grammar.rules[2], grammar.rules[3]
     inner_vals, traceback_vals = None, None
@@ -102,24 +90,33 @@ def test_grammar(grammar: CFG, test_strings, recompute=False, prev_file=None):
 
 
 def compare_results(test, traceback_vals, inner_vals):
+    print()
     string_lengths = [s.shape[1] for s in test]
     pairings = get_pairings_from_parse_tree(traceback_vals, string_lengths)
     comparisons = np.zeros((len(test), 3, 4))
     # first a simple comparison of pairings, we will check the presene and absence of pairs
     for s in range(len(test)):
-        comparisons[s] = comparison( test[s][2].astype(int),pairings[s],)
+        comparisons[s] = comparison(test[s][2].astype(int), pairings[s], )
     for measure in range(3):
         TP_percent = np.sum(comparisons[:, measure, 0]) / np.sum(
             comparisons[:, measure, 0] + comparisons[:, measure, 1])
         TN_percent = np.sum(comparisons[:, measure, 3]) / np.sum(
             comparisons[:, measure, 2] + comparisons[:, measure, 3])
-        print(f"Measure {measure}\t TP%{TP_percent:.2f} TN%{TN_percent:.2f}")
+        correct_percent = (np.sum(comparisons[:, measure, 0]) + np.sum(comparisons[:, measure, 3])) / np.sum(
+            comparisons[:, measure, :])
+        print(f"Measure {measure}\t ")
+        print(f"TP%: {TP_percent:.2f} TN%: {TN_percent:.2f} Correct%: {correct_percent:.2f}")
+        # also calculate the % of strings >80% correct using metric 2
+        correct = (comparisons[:, measure, 0] + comparisons[:, measure, 3]) / np.sum(comparisons[:, measure, :],
+                                                                                     axis=-1)
+        print(f" % of strings >75% correct: {np.sum(correct > 0.75) / len(correct):.2f}")
     return pairings, comparisons
 
 
-@njit(nb.i4[:,::1](nb.i4[::1],nb.i4[::1]),cache=True, parallel=True)
+@njit(nb.i4[:, ::1](nb.i4[::1], nb.i4[::1]), cache=True, parallel=True)
 def comparison(pairings, predictions):
-    TF_PN = np.zeros((3, 4),dtype=nb.i4)
+    # TP FN FP TN
+    TF_PN = np.zeros((3, 4), dtype=nb.i4)
     for i in prange(len(pairings)):
         if pairings[i] > 0:
             if predictions[i] > 0:

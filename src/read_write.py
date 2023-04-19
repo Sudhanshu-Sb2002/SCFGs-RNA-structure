@@ -3,7 +3,8 @@ import os
 import pickle
 import pandas as pd
 import numpy as np
-from numba import njit
+
+
 def get_data_set_paths(DATA_SET_PATH):
     x = {}
 
@@ -13,10 +14,10 @@ def get_data_set_paths(DATA_SET_PATH):
 
     return x
 
-def read_all_RNA_strand_data(data_set_path, reread=False,reload_path=None):
+
+def read_all_RNA_strand_data(data_set_path, reread=False, reload_path=None):
     # first we go through all files in the directory
     seqs = {}
-
 
     if reread:
         files = os.listdir(data_set_path)
@@ -52,14 +53,14 @@ def read_all_RNA_strand_data(data_set_path, reread=False,reload_path=None):
             except:
                 print("error in file", file)
         try:
-            seqs['data']=seqs['RFA']+seqs['SRP']
+            seqs['data'] = seqs['RFA'] + seqs['SRP']
         except:
             pass
         pickle.dump(seqs, open(reload_path, "wb"))
 
     else:
         if reload_path is None:
-            reload_path=os.path.join(data_set_path, "data.pkl")
+            reload_path = os.path.join(data_set_path, "data.pkl")
         seqs = pickle.load(open(reload_path, "rb"))
     return refine_strands(seqs)
 
@@ -81,18 +82,30 @@ def refine_strands(seqs):
     return seqs, key_to_index
 
 
-def write_ct_file(filename,sequence, pairings,name):
+def write_ct_file(filename, sequence, pairings, name):
     with open(filename, "w") as f:
-        f.write("# RNA secondary structure in connect format")
-        f.write(str(len(sequence))+" "+name)
+        f.write("# RNA secondary structure in connect format\n")
+        f.write(str(len(sequence)) + " " + name + "\n")
         for i in range(len(sequence)):
-            f.write(f"{i+1} {sequence[i]} {i} {i+2} {pairings[i]} {i+1}")
-
-def write_prediction_actual( file_loc, seq, prediction,actual, terminal_inv_dict):
-    actual_path=os.path.join(file_loc,"actual.ct")
-    prediction_path=os.path.join(file_loc,"prediction.ct")
-    write_ct_file(actual_path,seq,actual,"actual")
-    write_ct_file(prediction_path,seq,prediction,"prediction")
+            f.write(f"{i + 1} {sequence[i]} {i} {i + 2} {pairings[i]} {i + 1}\n")
 
 
+def write_prediction_actual(file_loc, seq, prediction, actual, terminal_inv_dict):
+    actual_path = os.path.join(file_loc, "actual.ct")
+    prediction_path = os.path.join(file_loc, "prediction.ct")
+    write_ct_file(actual_path, seq, actual, "actual")
+    write_ct_file(prediction_path, seq, prediction, "prediction")
 
+
+def print_freqs(grammar, single_freq, double_freq):
+    print("Single Frequencies in Loop Region")
+    for i in range(len(single_freq)):
+        print(f"{grammar.terminals[i]} : {single_freq[i]:.2f}")
+    print("Double Frequencies in Stem Region")
+    print(
+        f"Base:\t{grammar.terminals[0]:<10}{grammar.terminals[1]:<10}{grammar.terminals[2]:<10}{grammar.terminals[3]:<10}")
+    print()
+    for i in range(len(double_freq)):
+        print(f"{grammar.terminals[i]:<5}", end="\t")
+        print(
+            f"{double_freq[i, 0]:<10.3f}{double_freq[i, 1]:<10.3f}{double_freq[i, 2]:<10.3f}{double_freq[i, 3]:<10.3f}")

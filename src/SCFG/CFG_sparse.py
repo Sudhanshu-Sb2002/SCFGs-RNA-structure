@@ -1,7 +1,5 @@
 import numpy as np
 from numba import njit, prange, jit
-import numba
-import os
 import sys
 import numba
 
@@ -286,25 +284,6 @@ class CFG:
         print(iteration, round(LogLikelihood[iteration], 3))
         iteration += 1
 
-        '''for v in range(n_nonterm):
-            if rule_present[v, 0] == 1:
-                for y in range(n_nonterm):
-                    for z in range(n_nonterm):
-                        if not np.isnan(tr_rule[v, y, z]):
-                            print('\t', v, "->", y, z, ":", np.round(tr_rule[v, y, z], 3))
-
-            if rule_present[v, 1] == 1:
-                print('\t', v, "-> s :", np.round(np.sum(e_rule[v]), 3))
-
-            if rule_present[v, 2] == 1:
-                for x in range(n_nonterm):
-                    if not np.isnan(r_rule[v, x]):
-                        print('\t', v, "->", x, ":", np.round(r_rule[v, x], 3))
-
-            if rule_present[v, 3] == 1:
-                for x in range(n_nonterm):
-                    if not np.isnan(et_rule[v, 0, x, 0]):
-                        print('\t', v, "->d", x, 'd :', np.round(np.sum(et_rule[v, :, x, :]), 3))'''
         e_rule1 = np.zeros((len(strings), n_nonterm, n_term), dtype=float)
         tr_rule1 = np.zeros((len(strings), n_nonterm, n_nonterm, n_nonterm), dtype=float)
         r_rule1 = np.zeros((len(strings), n_nonterm, n_nonterm), dtype=float)
@@ -367,13 +346,6 @@ class CFG:
                                         i + 1, j - 1, x] * et_old[v, strings[s][i], x, strings[s][j]]
                             et_rule1[s, v, :, x, :] = np.sum(et_rule1[s, v, :, x, :]) * double_rules
 
-                '''rules_denom[v] = np.nansum(tr_rule[v]) + np.nansum(e_rule[v]) + np.nansum(r_rule[v]) + np.nansum(
-                    et_rule[v])
-
-                tr_rule[v] /= rules_denom[v]
-                e_rule[v] /= rules_denom[v]
-                r_rule[v] /= rules_denom[v]
-                et_rule[v] /= rules_denom[v]'''
                 for s in prange(len(strings)):
                     rules_denom1[s, v] = np.nansum(tr_rule1[s, v]) + np.nansum(e_rule1[s, v]) + np.nansum(
                         r_rule1[s, v]) + np.nansum(
@@ -395,12 +367,6 @@ class CFG:
                 r_rule[v] /= rules_denom[v]
                 et_rule[v] /= rules_denom[v]
 
-            '''for v in prange(n_nonterm):
-                tr_rule[v] /= rules_denom[v]
-                e_rule[v] /= rules_denom[v]
-                r_rule[v] /= rules_denom[v]
-                et_rule[v] /= rules_denom[v]'''
-
             # E step
             # compute the inside and outside tables for each string
             for s in prange(len(strings)):
@@ -420,27 +386,6 @@ class CFG:
             if iteration >= n_iter or np.abs(LogLikelihood[iteration] - LogLikelihood[iteration - 1]) < tol:
                 break
 
-            '''if iteration % 1 == 0:
-                # print all non nan rules
-                for v in range(n_nonterm):
-                    if rule_present[v, 0] == 1:
-                        for y in range(n_nonterm):
-                            for z in range(n_nonterm):
-                                if not np.isnan(tr_rule[v, y, z]):
-                                    print('\t',v, "->", y, z,":", np.round(tr_rule[v, y, z], 3))
-
-                    if rule_present[v, 1] == 1:
-                        print('\t',v, "-> s :", np.round(np.sum(e_rule[v]), 3))
-
-                    if rule_present[v, 2] == 1:
-                        for x in range(n_nonterm):
-                            if not np.isnan(r_rule[v, x]):
-                                print('\t',v, "->", x,":", np.round(r_rule[v, x],3))
-
-                    if rule_present[v, 3] == 1:
-                        for x in range(n_nonterm):
-                            if not np.isnan(et_rule[v, 0, x, 0]):
-                                print('\t',v, "->d", x, 'd :', np.round(np.sum(et_rule[v, :, x, :]),3))'''
             tr_old, tr_rule = tr_rule, tr_old
             e_old, e_rule = e_rule, e_old
             r_old, r_rule = r_rule, r_old
@@ -450,26 +395,27 @@ class CFG:
 
     def grammar_print_rules(self):
         n_nonterm = len(self.nonterminals)
+        print("\nGrammar rules:")
         tr_rule, e_rule, r_rule, et_rule = self.rules[0], self.rules[1], self.rules[2], self.rules[3]
         for v in range(n_nonterm):
             if self.rule_present[v, 0] == 1:
                 for y in range(n_nonterm):
                     for z in range(n_nonterm):
                         if not np.isnan(tr_rule[v, y, z]):
-                            print('\t', v, "->", y, z, ":", np.round(tr_rule[v, y, z], 3), end=';')
+                            print(v, "->", y, z, ":", np.round(tr_rule[v, y, z], 3), end=';')
 
             if self.rule_present[v, 1] == 1:
-                print('\t', v, "-> s :", np.round(np.sum(e_rule[v]), 3), end=';')
+                print(v, "-> s :", np.round(np.sum(e_rule[v]), 3), end=';')
 
             if self.rule_present[v, 2] == 1:
                 for x in range(n_nonterm):
                     if not np.isnan(r_rule[v, x]):
-                        print('\t', v, "->", x, ":", np.round(r_rule[v, x], 3), end=';')
+                        print(v, "->", x, ":", np.round(r_rule[v, x], 3), end=';')
 
             if self.rule_present[v, 3] == 1:
                 for x in range(n_nonterm):
                     if not np.isnan(et_rule[v, 0, x, 0]):
-                        print('\t', v, "->d", x, 'd :', np.round(np.sum(et_rule[v, :, x, :]), 3), end=';')
+                        print(v, "->d", x, 'd :', np.round(np.sum(et_rule[v, :, x, :]), 3), end=';')
         print()
 
     def inside_out_driver(self, train_strings, val_strings, single_rules, double_rules, n_starts=10):
@@ -508,60 +454,6 @@ class CFG:
         tr_rule, e_rule, r_rule, et_rule, LogLikelihood, EachLogLikelihood = x
         self.rules = [tr_rule, e_rule, r_rule, et_rule]
 
-        '''tr_rule, e_rule, r_rule, et_rule, LogLikelihood, EachLogLikelihood = x
-        self.rules = [tr_rule, e_rule, r_rule, et_rule]
-        tr_rule1,e_rule1, r_rule1, et_rule1=np.copy(tr_rule),np.copy(e_rule),np.copy(r_rule),np.copy(et_rule)'''
-        '''tr_rule1,e_rule1, r_rule1, et_rule1=np.copy(self.rules[0]),np.copy(self.rules[1]),np.copy(self.rules[2]),np.copy(self.rules[3])
-        tr_rule1[0,1,0]=0.869
-        tr_rule1[2,1,0]=0.212
-        e_rule1[1]=0.895*single_rules
-        r_rule1[0,1]=0.131
-        et_rule1[2,:,2,:]=0.788*double_rules
-        et_rule1[1,:,2,:]=0.105*double_rules
-        t=self.inside_outside_algorithm(intstrings, tr_rule1,e_rule1, r_rule1, et_rule1,
-                                          self.rule_present, single_rules, double_rules, len(self.terminal_dict),
-                                          len(self.nonterminal_dict),
-                                          self.inside_algorithm, self.outside_algorithm, n_iter=20, tol=0.1)'''
-        # a function that compares likelihoods using two different rules
-        '''string=intstrings[81]
-        tr_rule1[0, 1, 0] = 0.944
-        tr_rule1[2, 1, 0] = 0.056
-        e_rule1[1] = 0.714 * single_rules
-        r_rule1[0, 1] = 0.106
-        et_rule1[2, :, 2, :] = 0.286 * double_rules
-        et_rule1[1, :, 2, :] = 0.894 * double_rules
-        yy = self.inside_algorithm(string, tr_rule1, e_rule1, r_rule1, et_rule1, self.rule_present,
-                               len(self.nonterminals),
-                               np.zeros((len(string), len(string), len(self.nonterminals))))'''
-        '''def comp(string):
-            xx = self.inside_algorithm(string, tr_rule, e_rule, r_rule, et_rule, self.rule_present,len(self.nonterminals),
-                                       np.zeros((len(string), len(string), len(self.nonterminals))))
-            yy = self.inside_algorithm(string, tr_rule1, e_rule1, r_rule1, et_rule1, self.rule_present,len(self.nonterminals),
-                                        np.zeros((len(string), len(string), len(self.nonterminals))))
-            print(xx[0, len(string) - 1, 0], yy[0, len(string) - 1, 0])
-            return xx, yy
-
-        tr_rule[0, 1, 0] = 0.869
-        tr_rule[2, 1, 0] = 0.212
-        e_rule[1] = 0.895 * single_rules
-        r_rule[0, 1] = 0.131
-        et_rule[2, :, 2, :] = 0.788 * double_rules
-        et_rule[1, :, 2, :] = 0.105 * double_rules
-        string=np.array([2,1,0,0,2,1,3])
-        #string = string1
-        yy = self.inside_algorithm(string, tr_rule1, e_rule1, r_rule1, et_rule1, self.rule_present,
-                                   len(self.nonterminals),
-                                   np.zeros((len(string), len(string), len(self.nonterminals))))
-        zz = outside_algorithm1(tr_rule1, r_rule1, et_rule1, self.rule_present, len(self.nonterminals),
-                                np.zeros((len(string), len(string), len(self.nonterminals))), yy, string)'''
-
-        '''
-        tr_rule[0,1,0]=0.869
-        tr_rule[2,1,0]=0.212
-        e_rule[1]=0.895*single_rules
-        r_rule[0,1]=0.031
-        et_rule[2,:,2,:]=0.788*double_rules
-        et_rule[1,:,2,:]=0.105*double_rules'''
         return LogLikelihood, EachLogLikelihood
         # return t
 
@@ -588,13 +480,13 @@ class CFG:
         return intstrings
 
 
-#@njit((numba.i4[:, :, :, ::1], numba.i4[::1], numba.i4[::1]), cache=True)
+# @njit((numba.i4[:, :, :, ::1], numba.i4[::1], numba.i4[::1]), cache=True)
 def convert_CYK_parse_to_RNA(tau, pos, RNA_strand_pairings):
     # this store (index+1) of the base that is paired with the base at index, 0 if unpaired
     # this function is called recursively, the split happpening when there is a transition rule being appplied
     while True:
         rule, x, y, k = tau[pos[0], pos[1], pos[2]]
-        if rule == 0:
+        if rule == 1:
             # emission rule (wil only occur at the end of the recursion)
             RNA_strand_pairings[pos[0]] = 0
             break
@@ -608,7 +500,7 @@ def convert_CYK_parse_to_RNA(tau, pos, RNA_strand_pairings):
             pos[2] = x
             pos[0] += 1
             pos[1] -= 1
-        elif rule == 1:
+        elif rule == 0:
             # transition rule (split the recursion)
             # split happens, such that we have to recurse for position string[pos[0],k,x] and string[k+1:pos[1],y]
             convert_CYK_parse_to_RNA(tau, [pos[0], k, x], RNA_strand_pairings)
@@ -619,162 +511,8 @@ def convert_CYK_parse_to_RNA(tau, pos, RNA_strand_pairings):
 
 def get_pairings_from_parse_tree(traceback_vals, len_strings):
     # now we get the pairings from the parse tree
-    pairings = [np.zeros(s, dtype=int) for s in len_strings]
+    pairings = [-np.ones(s, dtype=int) for s in len_strings]
     for i in range(len(len_strings)):
         convert_CYK_parse_to_RNA(traceback_vals[i], [0, len_strings[i] - 1, 0], pairings[i])
 
     return pairings
-
-
-'''
-def get_data_set_paths():
-    x = {}
-    x['humanTNRA'] = os.path.join(DATA_SET_PATH, "hg19-tRNAs", "hg19-mature-tRNAs.fa")
-    x['strand'] = os.path.join(DATA_SET_PATH, "RNA_STRAND_data", "RNA_STRAND_data", "all_ct_files")
-    return x '''
-
-'''def read_all_RNA_strand_data(data_set_path, reread=False):
-    # first we go through all files in the directory
-    seqs = {}
-
-    if reread:
-        files = os.listdir(data_set_path)
-        # we will store all the data in a list
-
-        for file in files:
-            try:
-                prefix = file.split("_")[0]
-                if prefix not in seqs:
-                    seqs[prefix] = []
-                # each file is a .ct file conncect format for RNA secondary structure
-                with open(os.path.join(data_set_path, file)) as f:
-                    #  first few lines are comments starting with #
-                    #  then there is a line whose first element is the number of nucleotides-n
-                    #  then there is a table with n rows 6 columns( seperated by spaces) which we read with pandas
-                    lines = f.readlines()
-                    # find the line with the number of nucleotides
-                    n = 0
-                    i = 0
-                    for i in range(len(lines)):
-                        if lines[i][0] != "#":
-                            n = int(lines[i].split()[0])
-                            break
-                    # read the table
-                    df = pd.read_csv(os.path.join(data_set_path, file), delim_whitespace=True, skiprows=i + 1, nrows=n,
-                                     header=None)
-                    # read the sequence
-                    temp = np.array(df[1].values, dtype=str)
-                    indices = np.array(df[0].values, dtype=int)
-                    pairings = np.array(df[4].values, dtype=int)
-                    seqs[prefix].append(np.array([temp, indices, pairings]))
-                    print(file, end="\t")
-            except:
-                print("error in file", file)
-        pickle.dump(seqs, open(os.path.join(data_set_path, "data.pkl"), "wb"))
-    else:
-        data = pickle.load(open(os.path.join(data_set_path, "data.pkl"), "rb"))
-        seqs = data
-    # if the key 'SPR' is there, we remove it
-    if 'SPR' in seqs:
-        del seqs['SPR']
-    keys_to_delete = []
-    for key, value in seqs.items():
-        if value is None or len(value) == 0:
-            keys_to_delete.append(key)
-    for key in keys_to_delete:
-        del seqs[key]
-    return seqs'''
-
-'''def create_grammar():
-    # first we create a grammar object
-    non_terminals = ["S", "L", "F"]
-    terminals = ["A", "C", "G", "U"]
-    grammar = CFG(non_terminals[0], non_terminals, terminals, InferGeneralRuleOnly=True)
-    # The rule types are S->LS|L, F-> dFd|LS, L->s|dFd
-    # ["Transition", "Emission", "Replace", "Emmission-Transtion"]
-    rules = []
-    rules.append(("S", 0, (1, 0)))
-    rules.append(("S", 2, [1]))
-    rules.append(("F", 0, (1, 0)))
-    rules.append(("L", 1, None))
-    for i in range(len(terminals)):
-        for j in range(len(terminals)):
-            rules.append(("F", 3, (i, 2, j)))
-            rules.append(("L", 3, (i, 2, j)))
-    # now we add the rules to the grammar
-    for rule in rules:
-        grammar.activate_rules(rule)
-    # we estimate single and double counts for the rules
-
-    # now we assign random probabilities to the rules
-    grammar.assign_random_probablities()
-    return grammar'''
-
-'''def train_grammar(grammar, strands, single_freq, double_freq):
-    # now we train the grammar
-    # first print out the  single and double frequencies
-
-    print("Single Frequencies in Loop Region")
-    for i in range(len(single_freq)):
-        print(f"{grammar.terminals[i]} : {single_freq[i]:.2f}")
-    print("Double Frequencies in Stem Region")
-    print(
-        f"Base:\t{grammar.terminals[0]:<10}{grammar.terminals[1]:<10}{grammar.terminals[2]:<10}{grammar.terminals[3]:<10}")
-    print()
-    for i in range(len(double_freq)):
-        print(f"{grammar.terminals[i]:<5}", end="\t")
-        print(
-            f"{double_freq[i, 0]:<10.2f}{double_freq[i, 1]:<10.2f}{double_freq[i, 2]:<10.2f}{double_freq[i, 3]:<10.2f}")
-
-    for v in range(len(grammar.nonterminals)):
-        if grammar.rule_present[v, 1]:
-            grammar.rules[1][v] = np.sum(grammar.rules[1][v]) * single_freq
-        if grammar.rule_present[v, 3]:
-            for w in range(len(grammar.nonterminals)):
-                if ~np.isnan(grammar.rules[3][v, 0, w, 0]):
-                    grammar.rules[3][v, :, w, :] = np.sum(grammar.rules[3][v, :, w, :]) * double_freq
-    strings_smaller_than_200=np.array([strand.shape[1]<200 for strand in strands])
-    strands_to_pass=[]
-    for i in range(len(strings_smaller_than_200)):
-        if strings_smaller_than_200[i]:
-            strands_to_pass.append(strands[i])
-    grammar.inside_out_driver(strands_to_pass, single_freq, double_freq)
-    return grammar'''
-
-'''def main():
-    # first we create an artificial grammar, mainly for testing purposes.
-    # the grammar is for RNA secondary structure prediction
-    data_set_paths = get_data_set_paths()
-    # read all the RNA strand data
-    seqs = read_all_RNA_strand_data(data_set_paths['strand'], reread=False)
-    # now we create a grammar for CRW dataset
-    grammar = create_grammar()
-    freq_path = os.path.join('..', 'tmp', 'freqs.npz')
-    single_freq, double_freq = None, None
-    if os.path.exists(freq_path):
-        data = np.load(freq_path)
-        single_freq = data['single_freq']
-        double_freq = data['double_freq']
-    else:
-        single_freq, double_freq = grammar.estimate_base_pair_freqs(seqs)
-        np.savez(freq_path, single_freq=single_freq, double_freq=double_freq)
-
-    # make a dict that matches keys of seq to indices of single and double based on the order of keys in seqs
-    key_to_index = {}
-    for i, key in enumerate(seqs.keys()):
-        key_to_index[key] = i
-    # now we train the grammar on RFA dataset
-    grammar = train_grammar(grammar, seqs['RFA'], single_freq[key_to_index['RFA']], double_freq[key_to_index['RFA']])'''
-
-'''332.55066079295153 ASE
-1302.2263257575758 CRW
-nan data.pkl
-12.773584905660377 NDB
-466.0264150943396 PDB
-118.8626198083067 RFA
-75.48830409356725 SPR
-224.74412532637075 SRP
-367.71487603305786 TMR
-Wrong bases:  0'''
-
-# savepoint comment

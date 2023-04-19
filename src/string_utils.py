@@ -1,9 +1,8 @@
 import os
-import pickle
 import numpy as np
 
 
-def estimate_base_pair_freqs(convert_strings_to_int,terminal_dict, string_dict,freq_path, recompute=False):
+def estimate_base_pair_freqs(convert_strings_to_int, terminal_dict, string_dict, freq_path, recompute=False):
     if not recompute and os.path.exists(freq_path):
         data = np.load(freq_path)
         single_freq = data['single_freq']
