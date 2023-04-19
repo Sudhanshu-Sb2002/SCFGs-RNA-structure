@@ -106,10 +106,15 @@ def compare_results(test, traceback_vals, inner_vals):
             comparisons[:, measure, :])
         print(f"Measure {measure}\t ")
         print(f"TP%: {TP_percent:.2f} TN%: {TN_percent:.2f} Correct%: {correct_percent:.2f}")
+        # also calculate PPV and NPV
+        PPV = np.sum(comparisons[:, measure, 0]) / np.sum(comparisons[:, measure, 0] + comparisons[:, measure, 2])
+        NPV = np.sum(comparisons[:, measure, 3]) / np.sum(comparisons[:, measure, 1] + comparisons[:, measure, 3])
+        print(f"PPV: {PPV:.2f} NPV: {NPV:.2f}")
         # also calculate the % of strings >80% correct using metric 2
         correct = (comparisons[:, measure, 0] + comparisons[:, measure, 3]) / np.sum(comparisons[:, measure, :],
                                                                                      axis=-1)
         print(f" % of strings >75% correct: {np.sum(correct > 0.75) / len(correct):.2f}")
+
     return pairings, comparisons
 
 
